@@ -1,7 +1,7 @@
 # XSS Hunter Client
 
 ## What is the this tool for?
-This tool can be used to generate correlated XSS payloads, these payloads are tagged with a unique ID which can be used to track which HTTP request caused with XSS payload to fire. By using this tool all of your injection attempts are tracked and the reports you generate will have the responsible injection attempt included in the final output. This is useful since XSS payloads can often traverse multiple services (and even protocols) before firing, so it's not always clear what injection caused a certain XSS payload to fire.
+This tool can be used to generate correlated XSS payloads, these payloads are tagged with a unique ID which can be used to track which HTTP request caused which XSS payload to fire. By using this tool all of your injection attempts are tracked and the reports you generate will have the responsible injection attempt included in the final output. This is useful since XSS payloads can often traverse multiple services (and even protocols) before firing, so it's not always clear what injection caused a certain XSS payload to fire.
 
 ## Setup
 1. Create an XSS Hunter account at https://xsshunter.com/
