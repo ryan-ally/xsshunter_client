@@ -53,6 +53,16 @@ def payload_id_to_payload( payload_id, payload_token ):
 def request( context, flow ):
     probe_ids = []
 
+    # Replace all instances in HTTP path with probe markers
+    req_path, path_probe_ids = replace_with_probe_markers(
+            flow.request.path,
+            context,
+            [],
+            True,
+    )
+    flow.request.path = req_path
+    probe_ids += path_probe_ids
+
     # Replace all instances in HTTP body with probe markers
     req_body, body_probe_ids = replace_with_probe_markers(
             flow.request.content,
