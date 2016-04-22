@@ -116,7 +116,7 @@ def replace_with_probe_markers(input_text, context, probe_marker_list, urlencode
     # Iterate through all dummy words to see if we have a replacement to make
     for keyword, payload_id in settings["xss_probe_settings"].iteritems():
         # Does this keyword exist in our text
-        if keyword in input_text:
+        if input_text and keyword in input_text:
             payload_token = get_random_id(10)
             payload = payload_id_to_payload( payload_id, payload_token )
 
@@ -141,8 +141,9 @@ def notify_probe_server(request_details, context):
 
 def probe_sent_cb(fut, context):
     resp = fut.result()
-    context.log(resp)
-    context.log(resp.text)
+    #context.log(resp)
+    #context.log(resp.text)
+    context.log( "Sent injection attempt to XSS Hunter server!")
 
 
 def get_random_id(num):
